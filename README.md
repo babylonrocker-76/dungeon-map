@@ -2,6 +2,8 @@
 
 Mappe D&D con vista Master (mappa completa) e vista Giocatore (nebbia di battaglia).
 
+## Avvio
+
 ```bash
 docker compose up --build -d
 ```
@@ -13,6 +15,20 @@ Apri **http://localhost:8081**
 | Master    | master   | master   |
 | Giocatore | player   | player   |
 
+## Mappe
+
 **Formati supportati:** PNG, JPG, JPEG, WEBP, GIF, SVG (max 50 MB).
 
-Il **Master** può caricare le mappe direttamente dal browser (drag & drop o selezione file).
+Il **Master** può caricare le mappe direttamente dal browser (drag & drop o selezione file), organizzandole in cartelle.
+
+### Generare mappe
+
+Puoi creare mappe procedurali gratuitamente su **[watabou.itch.io](https://watabou.itch.io/)** — alcuni generatori utili per D&D:
+
+- [One Page Dungeon](https://watabou.itch.io/one-page-dungeon) — dungeon su una pagina
+- [Medieval Fantasy City Generator](https://watabou.itch.io/medieval-fantasy-city-generator) — città fantasy
+- [Cave/Glade Generator](https://watabou.itch.io/cave-glade-generator) — grotte e radure
+- [Procgen Mansion](https://watabou.itch.io/procgen-mansion) — palazzi e manieri
+- [Perilous Shores](https://watabou.itch.io/perilous-shores) — regioni e mappe overworld
+
+Esporta l'immagine generata (PNG o JPG) e caricala nell'app.
