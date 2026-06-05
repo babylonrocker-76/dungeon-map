@@ -1,6 +1,7 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from './auth';
+import { WATABOU_GENERATORS, buildWatabouUrl, randomSeed } from './watabouGenerators';
 
 const ACCEPT = '.png,.jpg,.jpeg,.webp,.gif,.svg';
 
@@ -46,7 +47,43 @@ export default function Dashboard() {
   const [targetFolder, setTargetFolder] = useState('');
   const [newFolderName, setNewFolderName] = useState('');
   const [formats, setFormats] = useState({ label: 'PNG, JPG, JPEG, WEBP, GIF, SVG', maxMb: 50 });
+  const [watabouId, setWatabouId] = useState('dungeon');
+  const [watabouSeed, setWatabouSeed] = useState('');
+  const [watabouTags, setWatabouTags] = useState([]);
+  const [watabouCitySize, setWatabouCitySize] = useState(15);
+  const [watabouCityToggles, setWatabouCityToggles] = useState({ walls: 1, river: 1, citadel: 0, coast: 0 });
+  const [watabouMsg, setWatabouMsg] = useState('');
   const isMaster = user.role === 'master';
+
+  const watabouGen = useMemo(
+    () => WATABOU_GENERATORS.find((g) => g.id === watabouId) || WATABOU_GENERATORS[0],
+    [watabouId],
+  );
+
+  const watabouOptions = useMemo(() => ({
+    seed: watabouSeed,
+    tags: watabouTags,
+    citySize: watabouCitySize,
+    cityToggles: watabouCityToggles,
+  }), [watabouSeed, watabouTags, watabouCitySize, watabouCityToggles]);
+
+  const openWatabou = (exportPng) => {
+    const url = buildWatabouUrl(watabouGen, { ...watabouOptions, exportPng });
+    window.open(url, '_blank', 'noopener,noreferrer');
+    if (exportPng && watabouGen.autoExport) {
+      setWatabouMsg('Il PNG dovrebbe scaricarsi automaticamente. Trascinalo nella zona «Carica mappe» qui sotto.');
+    } else if (exportPng) {
+      setWatabouMsg('Apri il menu contestuale (tasto destro) sul generatore e scegli «Save as PNG», poi carica il file qui sotto.');
+    } else {
+      setWatabouMsg('Generatore aperto in una nuova scheda. Esporta il PNG e caricalo qui sotto.');
+    }
+  };
+
+  const toggleWatabouTag = (tagId) => {
+    setWatabouTags((prev) => (
+      prev.includes(tagId) ? prev.filter((t) => t !== tagId) : [...prev, tagId]
+    ));
+  };
 
   useEffect(() => {
     setTargetFolder(currentPath || '');
@@ -185,6 +222,123 @@ export default function Dashboard() {
               </span>
             ))}
           </nav>
+        )}
+
+        {isMaster && (
+          <section className="watabou-panel">
+            <h2>Genera da watabou</h2>
+            <p className="watabou-info">
+              Crea mappe procedurali con i generatori di{' '}
+              <a href="https://watabou.itch.io/" target="_blank" rel="noopener noreferrer">watabou.itch.io</a>
+              , poi caricale nella sessione.
+            </p>
+
+            <div className="watabou-fields">
+              <label>
+                <span>Generatore</span>
+                <select value={watabouId} onChange={(e) => { setWatabouId(e.target.value); setWatabouMsg(''); }}>
+                  {WATABOU_GENERATORS.map((g) => (
+                    <option key={g.id} value={g.id}>{g.label}</option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                <span>Seed (opzionale)</span>
+                <div className="watabou-seed-row">
+                  <input
+                    type="text"
+                    placeholder="Lascia vuoto per casuale"
+                    value={watabouSeed}
+                    onChange={(e) => setWatabouSeed(e.target.value)}
+                  />
+                  <button type="button" className="btn-clear" onClick={() => setWatabouSeed(randomSeed())}>
+                    Casuale
+                  </button>
+                </div>
+              </label>
+            </div>
+
+            <p className="watabou-desc">{watabouGen.description}</p>
+
+            {watabouGen.id === 'dungeon' && watabouGen.tags?.length > 0 && (
+              <div className="watabou-tags">
+                <span className="watabou-tags-label">Tag dungeon</span>
+                <div className="watabou-tag-list">
+                  {watabouGen.tags.map((tag) => (
+                    <button
+                      key={tag.id}
+                      type="button"
+                      className={`watabou-tag ${watabouTags.includes(tag.id) ? 'active' : ''}`}
+                      onClick={() => toggleWatabouTag(tag.id)}
+                    >
+                      {tag.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {watabouGen.id === 'city' && (
+              <div className="watabou-city-options">
+                <label>
+                  <span>Dimensione città</span>
+                  <input
+                    type="range"
+                    min={5}
+                    max={50}
+                    value={watabouCitySize}
+                    onChange={(e) => setWatabouCitySize(Number(e.target.value))}
+                  />
+                  <em>{watabouCitySize} distretti</em>
+                </label>
+                <div className="watabou-city-toggles">
+                  {watabouGen.toggles.map((toggle) => (
+                    <label key={toggle.id} className="watabou-toggle">
+                      <input
+                        type="checkbox"
+                        checked={!!(watabouCityToggles[toggle.id] ?? toggle.default)}
+                        onChange={(e) => setWatabouCityToggles((prev) => ({
+                          ...prev,
+                          [toggle.id]: e.target.checked ? 1 : 0,
+                        }))}
+                      />
+                      {toggle.label}
+                    </label>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div className="watabou-actions">
+              {watabouGen.autoExport ? (
+                <button type="button" className="btn-upload" onClick={() => openWatabou(true)}>
+                  Genera e scarica PNG
+                </button>
+              ) : (
+                <button type="button" className="btn-upload" onClick={() => openWatabou(false)}>
+                  Apri generatore
+                </button>
+              )}
+              <button type="button" className="btn-clear" onClick={() => openWatabou(false)}>
+                Anteprima
+              </button>
+              <a
+                className="btn-clear watabou-link"
+                href={watabouGen.itchUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                Su itch.io
+              </a>
+            </div>
+
+            {!watabouGen.autoExport && (
+              <p className="watabou-hint">
+                Questo generatore non supporta il download automatico: esporta il PNG con tasto destro → «Save as PNG».
+              </p>
+            )}
+            {watabouMsg && <p className="watabou-success">{watabouMsg}</p>}
+          </section>
         )}
 
         {isMaster && (

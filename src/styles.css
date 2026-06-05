@@ -471,6 +471,182 @@ a:hover {
   color: var(--accent);
 }
 
+.watabou-panel {
+  margin-bottom: 1.5rem;
+  padding: 1.5rem;
+  background: var(--bg-card);
+  border: 1px solid rgba(58, 106, 138, 0.45);
+  border-radius: 4px;
+}
+
+.watabou-panel h2 {
+  font-size: 1rem;
+  color: #7eb8da;
+  margin-bottom: 0.5rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.watabou-info {
+  color: var(--text-muted);
+  font-size: 0.9rem;
+  margin-bottom: 1rem;
+}
+
+.watabou-info a {
+  color: #7eb8da;
+}
+
+.watabou-fields {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+  margin-bottom: 0.75rem;
+}
+
+.watabou-fields label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.watabou-fields label span,
+.watabou-tags-label {
+  font-family: 'Cinzel', serif;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.watabou-fields select,
+.watabou-fields input[type='text'] {
+  background: var(--bg-dark);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 0.6rem 0.85rem;
+  color: var(--text);
+  font-size: 0.95rem;
+}
+
+.watabou-seed-row {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.watabou-seed-row input {
+  flex: 1;
+}
+
+.watabou-desc {
+  font-size: 0.88rem;
+  color: var(--text-muted);
+  font-style: italic;
+  margin-bottom: 0.85rem;
+}
+
+.watabou-tags {
+  margin-bottom: 1rem;
+}
+
+.watabou-tag-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-top: 0.45rem;
+}
+
+.watabou-tag {
+  background: var(--bg-dark);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  padding: 0.35rem 0.7rem;
+  border-radius: 3px;
+  font-size: 0.78rem;
+  transition: all 0.15s;
+}
+
+.watabou-tag:hover {
+  border-color: rgba(58, 106, 138, 0.6);
+  color: var(--text);
+}
+
+.watabou-tag.active {
+  background: rgba(58, 106, 138, 0.2);
+  border-color: #7eb8da;
+  color: #7eb8da;
+}
+
+.watabou-city-options {
+  margin-bottom: 1rem;
+}
+
+.watabou-city-options label span {
+  font-family: 'Cinzel', serif;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.watabou-city-options input[type='range'] {
+  width: 100%;
+  margin: 0.4rem 0;
+  accent-color: #7eb8da;
+}
+
+.watabou-city-options em {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  font-style: normal;
+}
+
+.watabou-city-toggles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem 1.25rem;
+  margin-top: 0.75rem;
+}
+
+.watabou-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.88rem;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.watabou-toggle input {
+  accent-color: #7eb8da;
+}
+
+.watabou-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-top: 0.5rem;
+}
+
+.watabou-link {
+  display: inline-flex;
+  align-items: center;
+  text-decoration: none;
+}
+
+.watabou-hint {
+  margin-top: 0.75rem;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.watabou-success {
+  margin-top: 0.75rem;
+  color: #7eb89a;
+  font-size: 0.9rem;
+}
+
 .upload-panel {
   margin-bottom: 2rem;
   padding: 1.5rem;
@@ -636,7 +812,8 @@ a:hover {
 }
 
 @media (max-width: 700px) {
-  .upload-folder-fields {
+  .upload-folder-fields,
+  .watabou-fields {
     grid-template-columns: 1fr;
   }
 }
