@@ -1,0 +1,20 @@
+services:
+  dungeon-viewer:
+    build: .
+    ports:
+      - "${PORT:-8081}:8081"
+    environment:
+      PORT: 8081
+      JWT_SECRET: ${JWT_SECRET:-dungeon-secret-change-me}
+    volumes:
+      - ./data/projects:/app/data/projects
+      - dungeon-fog:/app/data/fog
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8081/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+volumes:
+  dungeon-fog:
