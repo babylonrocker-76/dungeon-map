@@ -694,6 +694,23 @@ a:hover {
   color: var(--text-muted);
 }
 
+.btn-fullscreen {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  padding: 0.35rem 0.7rem;
+  border-radius: 3px;
+  font-size: 0.75rem;
+  letter-spacing: 0.04em;
+  margin-left: 0.5rem;
+  transition: border-color 0.2s, color 0.2s;
+}
+
+.btn-fullscreen:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
 .conn-dot {
   width: 8px;
   height: 8px;
@@ -806,12 +823,11 @@ a:hover {
   cursor: crosshair;
 }
 
-.map-transform {
+.map-viewport {
+  position: absolute;
+  top: 50%;
+  left: 50%;
   transform-origin: center center;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 100%;
   transition: transform 0.05s linear;
 }
 
@@ -829,6 +845,16 @@ a:hover {
   max-height: calc(100vh - 200px);
   width: auto;
   height: auto;
+}
+
+.map-viewer:fullscreen {
+  background: #0d0a08;
+}
+
+.map-viewer:fullscreen .map-canvas,
+.map-viewer:fullscreen .fog-canvas {
+  max-width: none;
+  max-height: none;
 }
 
 .fog-canvas {
