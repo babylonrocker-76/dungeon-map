@@ -14,6 +14,7 @@ const JWT_SECRET = process.env.JWT_SECRET || 'dungeon-secret-change-me';
 const DATA_DIR = path.join(__dirname, 'data');
 const PROJECTS_DIR = path.join(DATA_DIR, 'projects');
 const FOG_DIR = path.join(DATA_DIR, 'fog');
+const TOKENS_DIR = path.join(DATA_DIR, 'tokens');
 const USERS_FILE = path.join(DATA_DIR, 'users.json');
 const DIST_DIR = path.join(__dirname, 'dist');
 const IMAGE_EXT = new Set(['.png', '.jpg', '.jpeg', '.webp', '.gif', '.svg']);
@@ -62,8 +63,14 @@ const upload = multer({
   },
 });
 
-fs.mkdirSync(PROJECTS_DIR, { recursive: true });
-fs.mkdirSync(FOG_DIR, { recursive: true });
+function ensureDataDirs() {
+  fs.mkdirSync(DATA_DIR, { recursive: true });
+  fs.mkdirSync(PROJECTS_DIR, { recursive: true });
+  fs.mkdirSync(FOG_DIR, { recursive: true });
+  fs.mkdirSync(TOKENS_DIR, { recursive: true });
+}
+
+ensureDataDirs();
 
 function hashPassword(password) {
   return crypto.scryptSync(password, PASSWORD_SALT, 64).toString('hex');
@@ -158,6 +165,31 @@ function loadFogState(mapId) {
 function saveFogState(mapId, state) {
   fogStates.set(mapId, state);
   fs.writeFileSync(getFogPath(mapId), JSON.stringify(state, null, 2));
+}
+
+const tokenStates = new Map();
+
+function getTokensPath(mapId) {
+  return path.join(TOKENS_DIR, `${mapId.replace(/[/\\]/g, '_')}.json`);
+}
+
+function loadTokenState(mapId) {
+  if (tokenStates.has(mapId)) return tokenStates.get(mapId);
+  const tokensPath = getTokensPath(mapId);
+  if (fs.existsSync(tokensPath)) {
+    const data = JSON.parse(fs.readFileSync(tokensPath, 'utf-8'));
+    tokenStates.set(mapId, data);
+    return data;
+  }
+  const initial = { tokens: [] };
+  tokenStates.set(mapId, initial);
+  return initial;
+}
+
+function saveTokenState(mapId, state) {
+  tokenStates.set(mapId, state);
+  fs.mkdirSync(TOKENS_DIR, { recursive: true });
+  fs.writeFileSync(getTokensPath(mapId), JSON.stringify(state, null, 2));
 }
 
 const app = express();
@@ -287,6 +319,7 @@ io.on('connection', (socket) => {
   socket.on('join-map', ({ mapId }) => {
     socket.join(mapId);
     socket.emit('fog-state', loadFogState(mapId));
+    socket.emit('tokens-state', loadTokenState(mapId));
   });
 
   socket.on('leave-map', ({ mapId }) => socket.leave(mapId));
@@ -319,6 +352,58 @@ io.on('connection', (socket) => {
     const state = { revealed: [{ type: 'all' }], hidden: [] };
     saveFogState(mapId, state);
     io.to(mapId).emit('fog-updated', state);
+  });
+
+  socket.on('token-add', ({ mapId, token }) => {
+    if (socket.user.role !== 'master' || !token?.type) return;
+    const state = loadTokenState(mapId);
+    const entry = {
+      id: crypto.randomUUID(),
+      type: String(token.type),
+      label: String(token.label || ''),
+      x: Number(token.x) || 0,
+      y: Number(token.y) || 0,
+      size: Number(token.size) || 48,
+    };
+    state.tokens.push(entry);
+    saveTokenState(mapId, state);
+    io.to(mapId).emit('tokens-updated', state);
+  });
+
+  socket.on('token-move', ({ mapId, id, x, y }) => {
+    if (socket.user.role !== 'master' || !id) return;
+    const state = loadTokenState(mapId);
+    const entry = state.tokens.find((t) => t.id === id);
+    if (!entry) return;
+    entry.x = Number(x) || 0;
+    entry.y = Number(y) || 0;
+    saveTokenState(mapId, state);
+    io.to(mapId).emit('tokens-updated', state);
+  });
+
+  socket.on('token-update', ({ mapId, id, label }) => {
+    if (socket.user.role !== 'master' || !id) return;
+    const state = loadTokenState(mapId);
+    const entry = state.tokens.find((t) => t.id === id);
+    if (!entry) return;
+    if (label !== undefined) entry.label = String(label);
+    saveTokenState(mapId, state);
+    io.to(mapId).emit('tokens-updated', state);
+  });
+
+  socket.on('token-remove', ({ mapId, id }) => {
+    if (socket.user.role !== 'master' || !id) return;
+    const state = loadTokenState(mapId);
+    state.tokens = state.tokens.filter((t) => t.id !== id);
+    saveTokenState(mapId, state);
+    io.to(mapId).emit('tokens-updated', state);
+  });
+
+  socket.on('tokens-clear', ({ mapId }) => {
+    if (socket.user.role !== 'master') return;
+    const state = { tokens: [] };
+    saveTokenState(mapId, state);
+    io.to(mapId).emit('tokens-updated', state);
   });
 });
 

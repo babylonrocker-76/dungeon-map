@@ -224,7 +224,56 @@ export default function Dashboard() {
           </nav>
         )}
 
+        {loading && <p className="status-msg">Caricamento...</p>}
+        {error && <p className="status-msg error">{error}</p>}
+
+        <section className="dashboard-browser">
+          {!loading && (
+            <>
+              {content.folders?.length > 0 && (
+                <section className="section">
+                  <h2>Cartelle</h2>
+                  <div className="folder-grid">
+                    {content.folders.map((f) => (
+                      <button key={f.id} className="folder-card" onClick={() => setCurrentPath(f.id)}>
+                        <span className="folder-icon">📁</span>
+                        <div><h3>{f.name}</h3><span>{countMaps(f)} mappe</span></div>
+                      </button>
+                    ))}
+                  </div>
+                </section>
+              )}
+              {content.maps?.length > 0 && (
+                <section className="section">
+                  <h2>Mappe</h2>
+                  <div className="map-grid">
+                    {content.maps.map((map) => (
+                      <button key={map.id} className="map-card" onClick={() => navigate(`/map/${map.id.split('/').map(encodeURIComponent).join('/')}`, { state: { map } })}>
+                        <div className="map-thumb">
+                          <img src={map.url} alt={map.name} loading="lazy" onError={(e) => { e.target.style.display = 'none'; }} />
+                        </div>
+                        <h3>{map.name}</h3>
+                      </button>
+                    ))}
+                  </div>
+                </section>
+              )}
+              {!content.folders?.length && !content.maps?.length && (
+                <div className="empty-state">
+                  <p>Nessuna mappa in questa cartella.</p>
+                  {isMaster ? (
+                    <p className="hint">Usa le sezioni qui sotto per generare o caricare mappe.</p>
+                  ) : (
+                    <p className="hint">Il Master deve caricare le mappe dalla sua sessione.</p>
+                  )}
+                </div>
+              )}
+            </>
+          )}
+        </section>
+
         {isMaster && (
+          <div className="dashboard-tools">
           <section className="watabou-panel">
             <h2>Genera da watabou</h2>
             <p className="watabou-info">
@@ -339,9 +388,7 @@ export default function Dashboard() {
             )}
             {watabouMsg && <p className="watabou-success">{watabouMsg}</p>}
           </section>
-        )}
 
-        {isMaster && (
           <section className="upload-panel">
             <h2>Carica mappe</h2>
             <p className="upload-info">
@@ -416,52 +463,7 @@ export default function Dashboard() {
             </div>
             {uploadMsg && <p className="upload-success">{uploadMsg}</p>}
           </section>
-        )}
-
-        {loading && <p className="status-msg">Caricamento...</p>}
-        {error && <p className="status-msg error">{error}</p>}
-
-        {!loading && (
-          <>
-            {content.folders?.length > 0 && (
-              <section className="section">
-                <h2>Cartelle</h2>
-                <div className="folder-grid">
-                  {content.folders.map((f) => (
-                    <button key={f.id} className="folder-card" onClick={() => setCurrentPath(f.id)}>
-                      <span className="folder-icon">📁</span>
-                      <div><h3>{f.name}</h3><span>{countMaps(f)} mappe</span></div>
-                    </button>
-                  ))}
-                </div>
-              </section>
-            )}
-            {content.maps?.length > 0 && (
-              <section className="section">
-                <h2>Mappe</h2>
-                <div className="map-grid">
-                  {content.maps.map((map) => (
-                    <button key={map.id} className="map-card" onClick={() => navigate(`/map/${map.id.split('/').map(encodeURIComponent).join('/')}`, { state: { map } })}>
-                      <div className="map-thumb">
-                        <img src={map.url} alt={map.name} loading="lazy" onError={(e) => { e.target.style.display = 'none'; }} />
-                      </div>
-                      <h3>{map.name}</h3>
-                    </button>
-                  ))}
-                </div>
-              </section>
-            )}
-            {!content.folders?.length && !content.maps?.length && !loading && (
-              <div className="empty-state">
-                <p>Nessuna mappa in questa cartella.</p>
-                {isMaster ? (
-                  <p className="hint">Crea una cartella e carica PNG, JPG, WEBP, GIF o SVG.</p>
-                ) : (
-                  <p className="hint">Il Master deve caricare le mappe dalla sua sessione.</p>
-                )}
-              </div>
-            )}
-          </>
+          </div>
         )}
       </main>
     </div>

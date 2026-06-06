@@ -15,6 +15,19 @@ Apri **http://localhost:8081**
 | Master    | master   | master   |
 | Giocatore | player   | player   |
 
+## Storage persistente
+
+Tutti i dati sono salvati nella cartella **`data/`** sul tuo computer e restano anche dopo `docker compose down` o un rebuild:
+
+| Cartella | Contenuto |
+|----------|-----------|
+| `data/projects/` | Cartelle e mappe caricate |
+| `data/fog/` | Stato nebbia di battaglia per mappa |
+| `data/tokens/` | Pedine su ogni mappa |
+| `data/users.json` | Account (creato al primo avvio) |
+
+Per backup o trasferimento su un altro PC, copia l’intera cartella `data/`.
+
 ## Mappe
 
 **Formati supportati:** PNG, JPG, JPEG, WEBP, GIF, SVG (max 50 MB).

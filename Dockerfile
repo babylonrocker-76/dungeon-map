@@ -13,8 +13,8 @@ COPY package.json ./
 RUN npm install --omit=dev
 COPY server.js ./
 COPY --from=builder /app/dist ./dist
-RUN mkdir -p data/projects data/fog
+RUN mkdir -p data/projects data/fog data/tokens
 ENV NODE_ENV=production PORT=8080
 EXPOSE 8080
-VOLUME ["/app/data/projects", "/app/data/fog"]
+VOLUME ["/app/data/projects", "/app/data/fog", "/app/data/tokens"]
 ENTRYPOINT ["/sbin/tini", "--", "node", "server.js"]

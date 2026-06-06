@@ -2,6 +2,9 @@ import { useState, useEffect, useLayoutEffect, useRef, useCallback } from 'react
 import { useParams, useLocation, useNavigate } from 'react-router-dom';
 import { io } from 'socket.io-client';
 import { useAuth } from './auth';
+import TokenPalette from './TokenPalette';
+import TokenLayer from './TokenLayer';
+import { getDefaultTokenSize } from './tokenPalette';
 
 const BRUSH_SIZES = [20, 40, 60, 100, 150];
 const FOG_COLOR = '#08060c';
@@ -129,17 +132,26 @@ export default function MapViewer() {
   const modeRef = useRef('reveal');
   const shapeRef = useRef('circle');
   const brushSizeRef = useRef(60);
+  const armedTypeRef = useRef(null);
   const isPanningRef = useRef(false);
   const lastPanRef = useRef({ x: 0, y: 0 });
   const spaceHeldRef = useRef(false);
   const containerRef = useRef(null);
+  const prevTokenCountRef = useRef(0);
 
   const [fogState, setFogState] = useState({ revealed: [], hidden: [] });
+  const [tokensState, setTokensState] = useState({ tokens: [] });
   const [brushSize, setBrushSize] = useState(60);
   const [mode, setMode] = useState('reveal');
   const [shape, setShape] = useState('circle');
   const [rectPreview, setRectPreview] = useState(null);
   const [fogPreviewEnabled, setFogPreviewEnabled] = useState(false);
+  const [armedType, setArmedType] = useState(null);
+  const [selectedTokenId, setSelectedTokenId] = useState(null);
+  const [labelDraft, setLabelDraft] = useState('');
+  const [placeLabelDraft, setPlaceLabelDraft] = useState('');
+  const [tokenPaletteOpen, setTokenPaletteOpen] = useState(false);
+  const [mapSize, setMapSize] = useState({ w: 0, h: 0 });
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [imageLoaded, setImageLoaded] = useState(false);
@@ -152,13 +164,23 @@ export default function MapViewer() {
     modeRef.current = mode;
     shapeRef.current = shape;
     brushSizeRef.current = brushSize;
-  }, [mode, brushSize, shape]);
+    armedTypeRef.current = armedType;
+  }, [mode, brushSize, shape, armedType]);
 
   useEffect(() => {
     const onKeyDown = (e) => {
+      if (e.code === 'Escape' && tokenPaletteOpen) {
+        setTokenPaletteOpen(false);
+        return;
+      }
       if (e.code === 'Space') {
         spaceHeldRef.current = true;
         e.preventDefault();
+      }
+      if ((e.code === 'Delete' || e.code === 'Backspace') && selectedTokenId && isMaster && mode === 'tokens') {
+        e.preventDefault();
+        socketRef.current?.emit('token-remove', { mapId: map.id, id: selectedTokenId });
+        setSelectedTokenId(null);
       }
     };
     const onKeyUp = (e) => {
@@ -170,7 +192,22 @@ export default function MapViewer() {
       window.removeEventListener('keydown', onKeyDown);
       window.removeEventListener('keyup', onKeyUp);
     };
-  }, []);
+  }, [selectedTokenId, isMaster, mode, map.id, tokenPaletteOpen]);
+
+  useEffect(() => {
+    if (!selectedTokenId) return;
+    const token = tokensState.tokens.find((t) => t.id === selectedTokenId);
+    setLabelDraft(token?.label || '');
+  }, [selectedTokenId, tokensState.tokens]);
+
+  useEffect(() => {
+    const count = tokensState.tokens.length;
+    if (count > prevTokenCountRef.current && isMaster && mode === 'tokens') {
+      const last = tokensState.tokens[count - 1];
+      if (last) setSelectedTokenId(last.id);
+    }
+    prevTokenCountRef.current = count;
+  }, [tokensState.tokens, isMaster, mode]);
 
   useEffect(() => {
     const onFullscreenChange = () => setIsFullscreen(!!document.fullscreenElement);
@@ -211,6 +248,7 @@ export default function MapViewer() {
 
     canvas.width = img.naturalWidth;
     canvas.height = img.naturalHeight;
+    setMapSize({ w: img.naturalWidth, h: img.naturalHeight });
     const ctx = canvas.getContext('2d');
 
     if (isMaster) {
@@ -256,6 +294,8 @@ export default function MapViewer() {
     socket.on('connect_error', () => setConnected(false));
     socket.on('fog-state', setFogState);
     socket.on('fog-updated', setFogState);
+    socket.on('tokens-state', setTokensState);
+    socket.on('tokens-updated', setTokensState);
 
     return () => {
       socket.emit('leave-map', { mapId: map.id });
@@ -306,11 +346,44 @@ export default function MapViewer() {
     emitArea({ type: 'rect', x: rect.x, y: rect.y, width: rect.width, height: rect.height });
   };
 
+  const placeToken = (coords) => {
+    if (!armedTypeRef.current) return;
+    socketRef.current?.emit('token-add', {
+      mapId: map.id,
+      token: {
+        type: armedTypeRef.current,
+        x: coords.x,
+        y: coords.y,
+        size: getDefaultTokenSize(mapSize.w),
+        label: placeLabelDraft.trim(),
+      },
+    });
+  };
+
+  const handleTokenMove = (id, x, y) => {
+    socketRef.current?.emit('token-move', { mapId: map.id, id, x, y });
+  };
+
+  const handleTokenRemove = (id) => {
+    socketRef.current?.emit('token-remove', { mapId: map.id, id });
+    if (selectedTokenId === id) setSelectedTokenId(null);
+  };
+
+  const commitTokenLabel = () => {
+    if (!selectedTokenId) return;
+    socketRef.current?.emit('token-update', {
+      mapId: map.id,
+      id: selectedTokenId,
+      label: labelDraft.trim(),
+    });
+  };
+
   const shouldPan = (e) => {
     if (e.button === 1 || e.button === 2) return true;
     if (e.button === 0 && (e.altKey || spaceHeldRef.current)) return true;
     if (!isMaster) return e.button === 0;
     if (modeRef.current === 'pan' && e.button === 0) return true;
+    if (modeRef.current === 'tokens' && e.button === 0) return false;
     return false;
   };
 
@@ -328,6 +401,16 @@ export default function MapViewer() {
       return;
     }
     if (!isMaster || modeRef.current === 'pan') return;
+
+    if (modeRef.current === 'tokens') {
+      if (armedTypeRef.current) {
+        placeToken(getMapCoords(e));
+      } else {
+        if (selectedTokenId) commitTokenLabel();
+        setSelectedTokenId(null);
+      }
+      return;
+    }
 
     if (shapeRef.current === 'rect') {
       isRectDraggingRef.current = true;
@@ -367,6 +450,12 @@ export default function MapViewer() {
     isDrawingRef.current = false;
   };
 
+  const mapCursorClass = !isMaster || mode === 'pan'
+    ? 'pan-mode'
+    : mode === 'tokens'
+      ? (armedType ? 'token-place-mode' : 'token-mode')
+      : 'draw-mode';
+
   return (
     <div className="map-viewer" ref={viewerRef}>
       <header className="viewer-header">
@@ -381,76 +470,157 @@ export default function MapViewer() {
         </div>
       </header>
 
-      {isMaster && (
-        <div className="master-toolbar">
-          <div className="tool-group">
-            <button className={mode === 'pan' ? 'active' : ''} onClick={() => setMode('pan')}>Sposta</button>
-            <button className={mode === 'reveal' ? 'active' : ''} onClick={() => setMode('reveal')}>Rivela</button>
-            <button className={mode === 'hide' ? 'active' : ''} onClick={() => setMode('hide')}>Oscura</button>
-          </div>
-          <div className="tool-group">
-            <button className={shape === 'circle' ? 'active' : ''} onClick={() => setShape('circle')}>Cerchio</button>
-            <button className={shape === 'rect' ? 'active' : ''} onClick={() => setShape('rect')}>Rettangolo</button>
-          </div>
-          {shape === 'circle' && (
-            <div className="tool-group">
-              {BRUSH_SIZES.map((s) => (
-                <button key={s} className={brushSize === s ? 'active' : ''} onClick={() => setBrushSize(s)}>{s}</button>
-              ))}
+      <div className="viewer-body">
+        {isMaster && tokenPaletteOpen && (
+          <TokenPalette
+            modal
+            armedType={armedType}
+            onSelect={(type) => {
+              setArmedType(type);
+              if (type) setMode('tokens');
+            }}
+            onClose={() => setTokenPaletteOpen(false)}
+          />
+        )}
+
+        <div className="viewer-main">
+          {isMaster && (
+            <div className="master-toolbar">
+              <div className="tool-group">
+                <button className={mode === 'pan' ? 'active' : ''} onClick={() => setMode('pan')}>Sposta</button>
+                <button className={mode === 'reveal' ? 'active' : ''} onClick={() => setMode('reveal')}>Rivela</button>
+                <button className={mode === 'hide' ? 'active' : ''} onClick={() => setMode('hide')}>Oscura</button>
+                <button className={mode === 'tokens' ? 'active' : ''} onClick={() => setMode('tokens')}>Pedine</button>
+                <button
+                  type="button"
+                  className={`btn-token-icons ${tokenPaletteOpen ? 'active' : ''} ${armedType ? 'has-selection' : ''}`}
+                  onClick={() => setTokenPaletteOpen((open) => !open)}
+                >
+                  Icone
+                </button>
+              </div>
+              {mode !== 'tokens' && (
+                <>
+                  <div className="tool-group">
+                    <button className={shape === 'circle' ? 'active' : ''} onClick={() => setShape('circle')}>Cerchio</button>
+                    <button className={shape === 'rect' ? 'active' : ''} onClick={() => setShape('rect')}>Rettangolo</button>
+                  </div>
+                  {shape === 'circle' && (
+                    <div className="tool-group">
+                      {BRUSH_SIZES.map((s) => (
+                        <button key={s} className={brushSize === s ? 'active' : ''} onClick={() => setBrushSize(s)}>{s}</button>
+                      ))}
+                    </div>
+                  )}
+                </>
+              )}
+              {mode === 'tokens' && (
+                <div className="tool-group token-name-field">
+                  <label>
+                    <span>Nome nuova pedina</span>
+                    <input
+                      type="text"
+                      placeholder="Es. Thorin, Goblin #1..."
+                      value={placeLabelDraft}
+                      maxLength={32}
+                      onChange={(e) => setPlaceLabelDraft(e.target.value)}
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    disabled={!selectedTokenId}
+                    onClick={() => selectedTokenId && handleTokenRemove(selectedTokenId)}
+                  >
+                    Rimuovi
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (window.confirm('Rimuovere tutte le pedine dalla mappa?')) {
+                        socketRef.current?.emit('tokens-clear', { mapId: map.id });
+                        setSelectedTokenId(null);
+                      }
+                    }}
+                  >
+                    Cancella tutte
+                  </button>
+                </div>
+              )}
+              <div className="tool-group">
+                <button onClick={() => socketRef.current?.emit('reset-fog', { mapId: map.id })}>Reset nebbia</button>
+                <button onClick={() => socketRef.current?.emit('reveal-all', { mapId: map.id })}>Rivela tutto</button>
+                <label className="fog-preview-toggle">
+                  <input type="checkbox" checked={fogPreviewEnabled} onChange={(e) => setFogPreviewEnabled(e.target.checked)} />
+                  Anteprima nebbia
+                </label>
+              </div>
             </div>
           )}
-          <div className="tool-group">
-            <button onClick={() => socketRef.current?.emit('reset-fog', { mapId: map.id })}>Reset nebbia</button>
-            <button onClick={() => socketRef.current?.emit('reveal-all', { mapId: map.id })}>Rivela tutto</button>
-            <label className="fog-preview-toggle">
-              <input type="checkbox" checked={fogPreviewEnabled} onChange={(e) => setFogPreviewEnabled(e.target.checked)} />
-              Anteprima nebbia
-            </label>
+
+          {!isMaster && (
+            <div className="player-hint">
+              {connected
+                ? 'Trascina per spostare la mappa. Le pedine si aggiornano in tempo reale.'
+                : 'Connessione in corso...'}
+            </div>
+          )}
+          {isMaster && mode === 'tokens' && (
+            <div className="player-hint">
+              {armedType
+                ? 'Clicca sulla mappa per piazzare. Doppio clic sulla pedina per modificare il nome sotto.'
+                : 'Clicca «Icone» nella toolbar per scegliere una pedina, poi clicca sulla mappa.'}
+            </div>
+          )}
+          {isMaster && mode !== 'pan' && mode !== 'tokens' && shape === 'rect' && (
+            <div className="player-hint">Trascina sulla mappa per selezionare un&apos;area rettangolare da rivelare o oscurare.</div>
+          )}
+          {isMaster && mode !== 'pan' && mode !== 'tokens' && shape === 'circle' && (
+            <div className="player-hint">Barra spaziatrice, tasto destro o Alt + trascina per spostare la mappa.</div>
+          )}
+          {loadError && <div className="player-hint" style={{ color: '#e8a0a0' }}>{loadError}</div>}
+
+          <div
+            ref={containerRef}
+            className={`map-container ${isPanning ? 'is-panning' : ''} ${mapCursorClass}`}
+            onWheel={(e) => { e.preventDefault(); setZoom((z) => Math.min(4, Math.max(0.25, z + (e.deltaY > 0 ? -0.1 : 0.1)))); }}
+            onPointerDown={handlePointerDown}
+            onPointerMove={handlePointerMove}
+            onPointerUp={handlePointerUp}
+            onPointerCancel={handlePointerUp}
+            onContextMenu={(e) => e.preventDefault()}
+          >
+            <div
+              className="map-viewport"
+              style={{ transform: `translate(calc(-50% + ${pan.x}px), calc(-50% + ${pan.y}px)) scale(${zoom})` }}
+            >
+              <div className="map-canvas-wrap">
+                <canvas ref={canvasRef} className="map-canvas" />
+                {showFogOverlay && <canvas ref={fogCanvasRef} className="fog-canvas" />}
+                <TokenLayer
+                  tokens={tokensState.tokens}
+                  mapWidth={mapSize.w}
+                  mapHeight={mapSize.h}
+                  isMaster={isMaster}
+                  mode={mode}
+                  selectedId={selectedTokenId}
+                  labelDraft={labelDraft}
+                  onSelect={setSelectedTokenId}
+                  onMove={handleTokenMove}
+                  onRemove={handleTokenRemove}
+                  onLabelDraftChange={setLabelDraft}
+                  onLabelCommit={commitTokenLabel}
+                />
+              </div>
+            </div>
+          </div>
+
+          <div className="zoom-controls">
+            <button onClick={() => setZoom((z) => Math.min(4, z + 0.25))}>+</button>
+            <span>{Math.round(zoom * 100)}%</span>
+            <button onClick={() => setZoom((z) => Math.max(0.25, z - 0.25))}>−</button>
+            <button onClick={() => { setZoom(1); setPan({ x: 0, y: 0 }); }}>Reset</button>
           </div>
         </div>
-      )}
-
-      {!isMaster && (
-        <div className="player-hint">
-          {connected
-            ? 'Trascina per spostare la mappa. Vedi solo le aree rivelate dal Master.'
-            : 'Connessione in corso...'}
-        </div>
-      )}
-      {isMaster && mode !== 'pan' && shape === 'rect' && (
-        <div className="player-hint">Trascina sulla mappa per selezionare un&apos;area rettangolare da rivelare o oscurare.</div>
-      )}
-      {isMaster && mode !== 'pan' && shape === 'circle' && (
-        <div className="player-hint">Barra spaziatrice, tasto destro o Alt + trascina per spostare la mappa.</div>
-      )}
-      {loadError && <div className="player-hint" style={{ color: '#e8a0a0' }}>{loadError}</div>}
-
-      <div
-        ref={containerRef}
-        className={`map-container ${isPanning ? 'is-panning' : ''} ${!isMaster || mode === 'pan' ? 'pan-mode' : 'draw-mode'}`}
-        onWheel={(e) => { e.preventDefault(); setZoom((z) => Math.min(4, Math.max(0.25, z + (e.deltaY > 0 ? -0.1 : 0.1)))); }}
-        onPointerDown={handlePointerDown}
-        onPointerMove={handlePointerMove}
-        onPointerUp={handlePointerUp}
-        onPointerCancel={handlePointerUp}
-        onContextMenu={(e) => e.preventDefault()}
-      >
-        <div
-          className="map-viewport"
-          style={{ transform: `translate(calc(-50% + ${pan.x}px), calc(-50% + ${pan.y}px)) scale(${zoom})` }}
-        >
-          <div className="map-canvas-wrap">
-            <canvas ref={canvasRef} className="map-canvas" />
-            {showFogOverlay && <canvas ref={fogCanvasRef} className="fog-canvas" />}
-          </div>
-        </div>
-      </div>
-
-      <div className="zoom-controls">
-        <button onClick={() => setZoom((z) => Math.min(4, z + 0.25))}>+</button>
-        <span>{Math.round(zoom * 100)}%</span>
-        <button onClick={() => setZoom((z) => Math.max(0.25, z - 0.25))}>−</button>
-        <button onClick={() => { setZoom(1); setPan({ x: 0, y: 0 }); }}>Reset</button>
       </div>
     </div>
   );

@@ -1,5 +1,12 @@
 node_modules/
 dist/
-data/fog/
-data/users.json
 .env
+
+# Dati persistenti (cartelle e mappe restano su disco, non in git)
+data/projects/*
+!data/projects/.gitkeep
+data/fog/*
+!data/fog/.gitkeep
+data/tokens/*
+!data/tokens/.gitkeep
+data/users.json
